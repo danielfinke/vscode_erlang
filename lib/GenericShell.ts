@@ -1,6 +1,10 @@
+import * as vscode from 'vscode';
 import { ChildProcess, spawn } from 'child_process'
 import { EventEmitter } from 'events'
-import * as utils from './utils';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fstat } from 'fs';
+import { ErlangSettings } from './erlangSettings';
 
 //inspired from https://github.com/WebFreak001/code-debug/blob/master/src/backend/mi2/mi2.ts for inspiration of an EventEmitter 
 const nonOutput = /^(?:\d*|undefined)[\*\+\=]|[\~\@\&\^]/;
@@ -17,6 +21,7 @@ function couldBeOutput(line: string) {
 export interface ILogOutput {
     show(): void;
     appendLine(value: string): void;
+    debug(msg : string) : void;
 }
 
 /**
@@ -34,10 +39,32 @@ export class GenericShell extends EventEmitter {
     protected errbuf: string = "";
     public erlangPath: string = null;
 
-    constructor(logOutput?: ILogOutput, shellOutput?: IShellOutput) {
+    //provide IGenericShellConfiguration, in order to avoid dependencies on vscode module (it doesn't works with debugger-adpater)
+    constructor(logOutput?: ILogOutput, shellOutput?: IShellOutput, erlangConfiguration?: ErlangSettings) {
         super();
         this.logOutput = logOutput;
         this.shellOutput = shellOutput;
+
+        // Find Erlang 'bin' directory
+        if (erlangConfiguration) {
+            let erlangPath = erlangConfiguration.erlangPath;
+            if (erlangPath) {
+                if (erlangPath.match(/^[A-Za-z]:/)) {
+                    // Windows absolute path (C:\...) is applicable on Windows only
+                    if (process.platform == 'win32') {
+                        this.erlangPath = path.win32.normalize(erlangPath);
+                    }
+                } else {
+                    erlangPath = path.normalize(erlangPath);
+                    if (! fs.existsSync(erlangPath)) {
+                        erlangPath = path.join(erlangConfiguration.rootPath, erlangPath);// vscode.workspace.rootPath, erlangPath);
+                    }
+                    if (fs.existsSync(erlangPath)) {
+                        this.erlangPath = erlangPath;
+                    }
+                }
+            }
+        }
     }
 
     protected RunProcess(processName, startDir: string, args: string[]): Promise<number> {
@@ -160,6 +187,10 @@ export class GenericShell extends EventEmitter {
     protected log(type: string, msg: string): void {
         this.logOutput && this.logOutput.appendLine(msg);
         this.emit("msg", type, msg[msg.length - 1] == '\n' ? msg : (msg + "\n"));
+    }
+
+    protected debug(msg : string) : void {
+        this.logOutput && this.logOutput.debug(msg);
     }
 
     public Send(what: string) {

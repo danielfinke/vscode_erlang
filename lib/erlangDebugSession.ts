@@ -81,7 +81,7 @@ export class ErlangDebugSession extends DebugSession implements ILogOutput {
 		
 	protected dispatchRequest(request: DebugProtocol.Request): void {
 		//uncomment to show the calling workflow of debuging session  
-		//this.debug(`dispatch request: ${request.command}(${JSON.stringify(request.arguments) })`);
+		//this.debug(`dispatch request: ${request.command}(${JSON.stringify(request.arguments) })\r\n`);
 		super.dispatchRequest(request);
 	}
 
@@ -130,6 +130,9 @@ export class ErlangDebugSession extends DebugSession implements ILogOutput {
 			args.addEbinsToCodepath = true;
 		}
 		this._LaunchArguments = args;
+		if (this._LaunchArguments.verbose) {
+			this.log(`debugger launchRequest arguments : ${JSON.stringify(args)}`);
+		}
 		this.erlangConnection.Start(this._LaunchArguments.verbose).then(port => {
 			//this.debug("Local webserver for erlang is started");
 			this._port = port;
@@ -149,6 +152,7 @@ export class ErlangDebugSession extends DebugSession implements ILogOutput {
 			this.debug(`	arguments : ${args.arguments}`);
 		}
 		this.erlDebugger.erlangPath = args.erlangPath;
+		//path of erl_connection.beam not compiled with lsp, because we don't that the target access to lsp_xx.beam
 		var bridgeBinPath = path.normalize(path.join(erlangBridgePath, "..", "ebin"))
 		this.erlDebugger.Start(args.erlpath, args.cwd, this._port, bridgeBinPath, args).then(r => {
 			this.sendResponse(response);

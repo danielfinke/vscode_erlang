@@ -25,6 +25,7 @@ import * as erlConnection from '../erlangConnection';
 import { ErlangSettings } from '../erlangSettings';
 import RebarShell from '../RebarShell';
 import { ErlangOutputAdapter } from '../vscodeAdapter';
+import { getElangConfigConfiguration } from '../ErlangConfigurationProvider';
 
 /*
 other LSP
@@ -187,7 +188,7 @@ function waitForSocket(options:any, callback:any, _tries:any) {
     );
   }
 
-  var socket = Net.connect(port, host, function(one:any, two:any) {
+  var socket = Net.connect(port, host, () => {
     socket.removeListener('error', handleError);
     callback(null, socket);
   });
@@ -213,7 +214,7 @@ function getPort(callback) {
     sock.end('OK\n');
   });
   server.listen(0, function () {
-    var port = server.address().port;
+    var port = (<Net.AddressInfo>server.address()).port;
     server.close(function () {
       callback(port);
     });
@@ -221,7 +222,8 @@ function getPort(callback) {
 }
 
 export function activate(context: ExtensionContext) {
-    if (Workspace.getConfiguration("erlang").get("verbose", false))
+    let erlangCfg = getElangConfigConfiguration(); 
+    if (erlangCfg.verbose)
         lspOutputChannel = Window.createOutputChannel('Erlang Language Server');
 
     let middleware: Middleware = {
@@ -256,12 +258,12 @@ export function activate(context: ExtensionContext) {
         outputChannel: lspOutputChannel
     }
 
-    let clientName = Workspace.getConfiguration("erlang").get("verbose", false) ? 'Erlang Language Server' : '';
+    let clientName = erlangCfg.verbose ? 'Erlang Language Server' : '';
     client = new LanguageClient(clientName, async () => {
         return new Promise<StreamInfo>(async (resolve, reject) => {
             await compileErlangBridge(context.extensionPath);
-            let erlangLsp = new ErlangShellLSP(lspOutputChannel);
-            erlangLsp.erlangPath = Workspace.getConfiguration("erlang").get("erlangPath", null);
+            let erlangLsp = new ErlangShellLSP(ErlangOutputAdapter(lspOutputChannel));
+            erlangLsp.erlangPath = erlangCfg.erlangPath;
 
             getPort(async function (port) {
                 erlangLsp.Start("", erlangBridgePath, port, "src", "");

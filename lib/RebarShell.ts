@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { GenericShell, ILogOutput, IShellOutput } from './GenericShell';
+import { getElangConfigConfiguration } from './ErlangConfigurationProvider';
 
 /**
  * Provides rebar shell commands. Locates appropriate rebar executable based on provided settings.
@@ -10,7 +11,7 @@ export default class RebarShell extends GenericShell {
     protected shellOutput: RebarShellOutput;
 
     constructor(private rebarSearchPaths: string[], private defaultRebarSearchPath: string, outputChannel: ILogOutput) {
-        super(outputChannel, new RebarShellOutput());
+        super(outputChannel, new RebarShellOutput(), getElangConfigConfiguration());
     }
 
     /**
@@ -31,19 +32,17 @@ export default class RebarShell extends GenericShell {
      * @returns Promise resolved or rejected when rebar exits
      */
     public async runScript(cwd: string, commands: string[]): Promise<RebarShellResult> {
-        let args = commands,
-            rebarFileName = this.getRebarFullPath();
-
-        if (process.platform == 'win32') {
-            args = [rebarFileName].concat(args);
-            rebarFileName = 'escript.exe';
-        }
+        // Rebar may not have execution permission (e.g. if extension is built
+        // on Windows but installed on Linux). Let's always run rebar by escript.
+        let escript = (process.platform == 'win32' ? 'escript.exe' : 'escript');
+        let rebarFileName = this.getRebarFullPath();
+        let args = [rebarFileName].concat(commands);
 
         this.shellOutput.clear();
 
         let result: number;
         try {
-            result = await this.RunProcess(rebarFileName, cwd, args);
+            result = await this.RunProcess(escript, cwd, args);
         } catch (exitCode) {
             result = exitCode;
         }
